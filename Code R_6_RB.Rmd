@@ -1,0 +1,277 @@
+---
+title: "Komstat Tubes"
+author: "Azzahra Putri Kamilah"
+date: "2025-11-14"
+output: html_document
+---
+
+```{r}
+# ========================
+# FUNGSI JACKKNIFE RESMI
+# SESUAI MATERI PERKULIAHAN
+# ========================
+
+jackknife <- function(x, stat_func = mean) {
+  x <- na.omit(x)
+  n <- length(x)
+
+  theta_hat <- stat_func(x)          # estimator penuh
+  theta_jack <- numeric(n)           # setiap leave-one-out
+
+  for(i in 1:n){
+    theta_jack[i] <- stat_func(x[-i])
+  }
+
+  theta_bar <- mean(theta_jack)      # rata2 jackknife
+  bias_jack <- (n - 1) * (theta_bar - theta_hat)
+  var_jack  <- (n - 1) / n * sum((theta_jack - theta_bar)^2)
+  mse_jack  <- var_jack + bias_jack^2
+
+  list(
+    theta_hat  = theta_hat,
+    theta_jack = theta_jack,
+    theta_bar  = theta_bar,
+    bias       = bias_jack,
+    variance   = var_jack,
+    mse        = mse_jack
+  )
+}
+
+```
+
+```{r}
+library(readxl)
+library(dplyr)
+library(stringr)
+
+df <- read_excel("~/SURVEY OKE.xlsx") %>%
+  mutate(across(everything(), ~ if(is.character(.)) str_trim(.) else .))
+
+```
+
+## 1. Perhitungan Jecknife Beasiswa
+
+```{r}
+# Konversi Beasiswa ke 1/0
+beasiswa <- ifelse(tolower(df$BEASISWA) == "ya", 1, 0)
+
+hasil_beasiswa <- jackknife(beasiswa, stat_func = mean)
+hasil_beasiswa
+
+```
+
+## Hasil Bar Chart Beasiswa
+
+```{r}
+df$BEA_KAT <- ifelse(tolower(df$BEASISWA) == "ya",
+                     "Beasiswa", "Tidak Beasiswa")
+library(ggplot2)
+
+ggplot(df, aes(x = BEA_KAT, fill = BEA_KAT)) +
+  geom_bar() +
+  labs(
+    title = "Distribusi Mahasiswa Berdasarkan Beasiswa",
+    x = "Status Beasiswa",
+    y = "Jumlah Mahasiswa"
+  ) +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Pastel1")
+```
+
+## 2. Perhitungan UKT
+
+```{r}
+ukt <- as.numeric(df$UKT)
+
+hasil_ukt <- jackknife(ukt, stat_func = mean)
+hasil_ukt
+
+```
+
+## Hasil BoxPlot UKT
+
+```{r}
+# Boxplot UKT
+ggplot(df, aes(y = UKT)) +
+  geom_boxplot(fill = "#00C08B", color = "black") +
+  labs(
+    title = "Boxplot UKT Mahasiswa Asrama TPB ITERA",
+    y = "UKT",
+    x = ""
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 10, hjust = 0.5, face = "bold")
+  )
+
+```
+
+## 3. Perhitungan golongan UKT
+
+```{r}
+gol <- as.numeric(df$Golongan)
+
+hasil_golongan <- jackknife(gol, stat_func = mean)
+hasil_golongan
+
+```
+
+## Pie Chart Golongan UKT
+
+```{r}
+# Hitung frekuensi dan persen
+gol_freq <- df %>%
+  count(Golongan) %>%
+  mutate(
+    persen = round(n / sum(n) * 100, 1),
+    label = paste0("Gol ", Golongan, " (", persen, "%)")
+  )
+
+# Tambahkan posisi untuk label (menggunakan sudut)
+gol_freq <- gol_freq %>%
+  arrange(desc(Golongan)) %>%
+  mutate(
+    ypos = cumsum(n) - 0.5*n
+  )
+
+# PIE CHART dengan label keluar (lebih rapi)install.packages("ggplot2")
+install.packages("ggrepel")
+library(ggrepel)
+ggplot(gol_freq, aes(x = "", y = n, fill = factor(Golongan))) +
+  geom_col(width = 1, color = "white") +
+  coord_polar(theta = "y") +
+  geom_label_repel(
+    aes(label = label, y = n, x = 1.3),
+    size = 4,
+    show.legend = FALSE,
+    nudge_x = 1,
+    nudge_y = 0,
+    segment.color = "grey50"
+  ) +
+  labs(
+    title = "Pie Chart Golongan UKT Mahasiswa Asrama TPB ITERA",
+    fill = "Golongan UKT"
+  ) +
+  theme_void()
+
+```
+
+## 4. Perhitungan Asal
+
+```{r}
+asal <- ifelse(str_detect(tolower(df$ASAL), "luar"), 1, 0)
+
+hasil_asal <- jackknife(asal, stat_func = mean)
+hasil_asal
+
+```
+
+## Pie Chart Asal
+
+```{r}
+# Buat kategori Asal
+df$ASAL_KAT <- ifelse(grepl("luar", df$ASAL, ignore.case = TRUE),
+                      "Luar Lampung", "Dalam Lampung")
+
+# Hitung frekuensi & persentase
+asal_freq <- df %>%
+  count(ASAL_KAT) %>%
+  mutate(
+    persen = round(n / sum(n) * 100, 1),
+    label = paste0(ASAL_KAT, " (", persen, "%)")
+  )
+
+# Pie Chart seperti gambar contoh
+ggplot(asal_freq, aes(x = "", y = n, fill = ASAL_KAT)) +
+  geom_col(width = 1, color = "white") +
+  coord_polar(theta = "y") +
+
+  # Menempatkan label di dalam slice
+  geom_label(
+    aes(label = label),
+    color = "black",
+    fill = "white",
+    position = position_stack(vjust = 0.5),
+    size = 5,
+    show.legend = FALSE
+  ) +
+  
+
+  labs(
+    title = "Pie Chart Asal Mahasiswa Asrama TPB ITERA",
+    fill = "Asal"
+  ) +
+  theme_void() + 
+  theme(
+    plot.title = element_text(size = 18, face = "bold", hjust = 0.5)
+  )
+
+```
+
+## Deskripsi Data
+
+```{r}
+library(readxl)
+library(dplyr)
+
+df <- read_excel("~/SURVEY OKE.xlsx") %>% 
+  mutate(across(everything(), ~ if(is.character(.)) trimws(.) else .))
+
+# Buat variabel kategori
+df$ASAL_KAT <- ifelse(grepl("luar", df$ASAL, ignore.case = TRUE),
+                      "Luar Lampung", "Dalam Lampung")
+
+df$BEA_KAT <- ifelse(tolower(df$BEASISWA) == "ya",
+                     "Mendapat Beasiswa", "Tidak Beasiswa")
+
+```
+
+```{r}
+deskripsi_ukt <- df %>%
+  summarise(
+    Min = min(UKT, na.rm = TRUE),
+    Q1 = quantile(UKT, 0.25, na.rm = TRUE),
+    Median = median(UKT, na.rm = TRUE),
+    Mean = mean(UKT, na.rm = TRUE),
+    Q3 = quantile(UKT, 0.75, na.rm = TRUE),
+    Max = max(UKT, na.rm = TRUE),
+    SD = sd(UKT, na.rm = TRUE),
+    Variance = var(UKT, na.rm = TRUE)
+  )
+
+deskripsi_ukt
+
+```
+
+```{r}
+deskripsi_golongan <- df %>%
+  count(Golongan) %>%
+  mutate(
+    Persentase = round(n / sum(n) * 100, 1)
+  )
+
+deskripsi_golongan
+
+```
+
+```{r}
+deskripsi_beasiswa <- df %>%
+  count(BEA_KAT) %>%
+  mutate(
+    Persentase = round(n / sum(n) * 100, 1)
+  )
+
+deskripsi_beasiswa
+
+```
+
+```{r}
+deskripsi_asal <- df %>%
+  count(ASAL_KAT) %>%
+  mutate(
+    Persentase = round(n / sum(n) * 100, 1)
+  )
+
+deskripsi_asal
+
+```
